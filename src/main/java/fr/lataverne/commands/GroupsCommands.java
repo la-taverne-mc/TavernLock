@@ -24,7 +24,7 @@ public class GroupsCommands implements CommandExecutor {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player)) {
-            sender.sendMessage("§cSeul les joueurs peuvent executer cette commande :/");
+            sender.sendMessage("§cSeul les joueurs peuvent exécuter cette commande :/");
             return true;
         }
 
@@ -33,16 +33,46 @@ public class GroupsCommands implements CommandExecutor {
 
         if (command.getName().equalsIgnoreCase("tavernlock")) {
             if (args.length < 1) {
-                player.sendMessage("§c/tavernlock <add|kick> <player>");
+                player.sendMessage("§r");
+                player.sendMessage("§6/tavernlock §eadd §7<joueur>");
+                player.sendMessage("§6/tavernlock §ekick §7<joueur>");
+                player.sendMessage("§6/tavernlock §egrouplist");
+                player.sendMessage("§r");
                 return true;
             }
 
             String action = args[0];
 
+            if (args.length == 1) {
+                if (action.equalsIgnoreCase("grouplist")) {
+                    List<String> groupMembers = groupsConfig.getStringList("players." + playerUUID + ".group_members");
+
+                    if (groupMembers.isEmpty()) {
+                        player.sendMessage("§eVotre groupe est vide.");
+                    } else {
+                        player.sendMessage("§eMembres de votre groupe :");
+                        player.sendMessage("§r");
+                        groupMembers.stream()
+                                .map(UUID::fromString)
+                                .map(Bukkit::getOfflinePlayer)
+                                .map(offlinePlayer -> offlinePlayer.getName() != null ? offlinePlayer.getName() : "Joueur inconnu")
+                                .forEach(memberName -> player.sendMessage("§7 - " + memberName));
+                    }
+
+                } else {
+                    player.sendMessage("§r");
+                    player.sendMessage("§6/tavernlock §eadd §7<joueur>");
+                    player.sendMessage("§6/tavernlock §ekick §7<joueur>");
+                    player.sendMessage("§6/tavernlock §egrouplist");
+                    player.sendMessage("§r");
+                }
+                return true;
+            }
+
             if (args.length == 2) {
                 Player targetPlayer = Bukkit.getPlayer(args[1]);
                 if (targetPlayer == null) {
-                    player.sendMessage("§cPlayer not found.");
+                    player.sendMessage("§cJoueur introuvable.");
                     return true;
                 }
 
@@ -53,10 +83,15 @@ public class GroupsCommands implements CommandExecutor {
                     player.sendMessage("§a" + targetPlayer.getName() + " a été ajouté à votre groupe.");
                 } else if (action.equalsIgnoreCase("kick")) {
                     removePlayerFromGroup(playerUUID, targetUUID);
-                    player.sendMessage("§c" + targetPlayer.getName() + " a été supprimé de votre groupe.");
+                    player.sendMessage("§c" + targetPlayer.getName() + " a été retiré de votre groupe.");
                 } else {
-                    player.sendMessage("§c/tavernlock <add|kick> <player>");
+                    player.sendMessage("§r");
+                    player.sendMessage("§6/tavernlock §eadd §7<joueur>");
+                    player.sendMessage("§6/tavernlock §ekick §7<joueur>");
+                    player.sendMessage("§6/tavernlock §egrouplist");
+                    player.sendMessage("§r");
                 }
+                return true;
             }
         }
         return true;
@@ -80,4 +115,3 @@ public class GroupsCommands implements CommandExecutor {
         }
     }
 }
-

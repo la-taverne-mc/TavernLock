@@ -22,6 +22,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 
 import java.util.Iterator;
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 public class ChestEvent implements Listener {
@@ -64,7 +65,7 @@ public class ChestEvent implements Listener {
                 .map(holder -> (Block) ((org.bukkit.block.Container) holder).getBlock())
                 .ifPresent(block -> {
 
-                    if (isChestLocked(block) && !isPlayerOwner(player, block)) {
+                    if (isChestLocked(block) && !isPlayerOwnerOrInGroup(player, block)) {
                         event.setCancelled(true);
                         sendPlayerMessage(player, "messages.chest_locked_others");
                         return;
@@ -73,7 +74,7 @@ public class ChestEvent implements Listener {
                     if (isDoubleChest(block)) {
                         Optional<Block> otherHalf = getOtherHalf(block);
                         otherHalf.ifPresent(halfBlock -> {
-                            if (isChestLocked(halfBlock) && !isPlayerOwner(player, halfBlock)) {
+                            if (isChestLocked(halfBlock) && !isPlayerOwnerOrInGroup(player, halfBlock)) {
                                 event.setCancelled(true);
                                 sendPlayerMessage(player, "messages.chest_locked_others");
                             }
@@ -81,7 +82,6 @@ public class ChestEvent implements Listener {
                     }
                 });
     }
-
 
     @EventHandler
     public void onSignBreak(BlockBreakEvent event) {
@@ -98,7 +98,7 @@ public class ChestEvent implements Listener {
 
             if (isStorageBlock(attachedBlock)) {
                 if (isChestLocked(attachedBlock)) {
-                    if (isPlayerOwner(player, attachedBlock)) {
+                    if (isPlayerOwnerOrInGroup(player, attachedBlock)) {
                         if (player.isSneaking()) {
                             if (isDoubleChest(attachedBlock)) {
                                 unlockDoubleChest(attachedBlock);
@@ -110,7 +110,7 @@ public class ChestEvent implements Listener {
                             sendPlayerMessage(player, "messages.chest_unlock");
                         } else {
                             event.setCancelled(true);
-                            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_TRADE, SoundCategory.RECORDS, 100, 0);
+                            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_TRADE, SoundCategory.RECORDS, 100, 2);
                             sendPlayerMessage(player, "messages.shift_leftclick_for_break");
                         }
                     } else {
@@ -123,12 +123,40 @@ public class ChestEvent implements Listener {
         } else if (isStorageBlock(block)) {
             if (isChestLocked(block)) {
                 event.setCancelled(true);
-                event.getPlayer().playSound(event.getPlayer().getLocation(), Sound.BLOCK_CHEST_LOCKED, SoundCategory.RECORDS, 100, 0);
-                sendPlayerMessage(event.getPlayer(), "messages.no_permission");
+                player.playSound(player.getLocation(), Sound.BLOCK_CHEST_LOCKED, SoundCategory.RECORDS, 100, 0);
+                sendPlayerMessage(player, "messages.no_permission");
             }
         }
     }
 
+    @EventHandler
+    public void onBlockBreak(BlockBreakEvent event) {
+        Block block = event.getBlock();
+        Player player = event.getPlayer();
+
+        if (player.hasPermission("tavernlock.bypass")) {
+            return;
+        }
+
+        if (isStorageBlock(block)) {
+            if (isChestLocked(block)) {
+                event.setCancelled(true);
+                player.playSound(player.getLocation(), Sound.BLOCK_CHEST_LOCKED, SoundCategory.BLOCKS, 1, 0);
+                sendPlayerMessage(player, "messages.no_permission");
+            }
+
+            if (isDoubleChest(block)) {
+                Optional<Block> otherHalf = getOtherHalf(block);
+                otherHalf.ifPresent(halfBlock -> {
+                    if (isChestLocked(halfBlock)) {
+                        event.setCancelled(true);
+                        player.playSound(player.getLocation(), Sound.BLOCK_CHEST_LOCKED, SoundCategory.BLOCKS, 1, 0);
+                        sendPlayerMessage(player, "messages.no_permission");
+                    }
+                });
+            }
+        }
+    }
 
     @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
@@ -144,17 +172,24 @@ public class ChestEvent implements Listener {
             Block attachedBlock = block.getRelative(signData.getFacing().getOppositeFace());
 
             if (isStorageBlock(attachedBlock) && isChestLocked(attachedBlock)) {
-                if (!isPlayerOwner(player, attachedBlock)) {
-                    event.setCancelled(true);  // Annuler l'interaction
-                    player.sendMessage("§cVous ne pouvez pas interagir avec ce panneau, ce coffre est privé !");
-                    player.playSound(player.getLocation(), Sound.BLOCK_CHEST_LOCKED, SoundCategory.BLOCKS, 1, 1);
+                if (!isPlayerOwnerOrInGroup(player, attachedBlock)) {
+                    event.setCancelled(true);
+                    sendPlayerMessage(player, "messages.no_permission_sign");
+                    player.playSound(player.getLocation(), Sound.BLOCK_CHEST_LOCKED, SoundCategory.BLOCKS, 1, 0);
                     return;
+                } else {
+                    if (event.getAction().isRightClick()){
+                        event.setCancelled(true);
+                        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_TRADE, SoundCategory.RECORDS, 100, 2);
+                        sendPlayerMessage(player, "messages.shift_leftclick_for_break");
+                        return;
+                    }
                 }
             }
         }
 
         if (block != null && isStorageBlock(block)) {
-            if (isChestLocked(block) && !isPlayerOwner(player, block)) {
+            if (isChestLocked(block) && !isPlayerOwnerOrInGroup(player, block)) {
                 event.setCancelled(true);
                 sendPlayerMessage(player, "messages.chest_locked_others");
                 return;
@@ -163,7 +198,7 @@ public class ChestEvent implements Listener {
             if (isDoubleChest(block)) {
                 Optional<Block> otherHalf = getOtherHalf(block);
                 otherHalf.ifPresent(halfBlock -> {
-                    if (isChestLocked(halfBlock) && !isPlayerOwner(player, halfBlock)) {
+                    if (isChestLocked(halfBlock) && !isPlayerOwnerOrInGroup(player, halfBlock)) {
                         event.setCancelled(true);
                         sendPlayerMessage(player, "messages.chest_locked_others");
                     }
@@ -171,7 +206,6 @@ public class ChestEvent implements Listener {
             }
         }
     }
-
 
     @EventHandler
     public void onEntityExplode(EntityExplodeEvent event) {
@@ -282,7 +316,7 @@ public class ChestEvent implements Listener {
     }
 
     /*
-    Vérifier si le coffre est verrouillé dans data.yml
+    Vérifier si coffre est verrouillé dans data.yml
      */
     private boolean isChestLocked(Block chestBlock) {
         String key = generateBlockKey(chestBlock);
@@ -290,16 +324,29 @@ public class ChestEvent implements Listener {
     }
 
     /*
-    Vérifier si le joueur est propriétaire du coffre
+    Vérifier si joueur est propriétaire du coffre ou dans groupe du propriétaire
      */
-    private boolean isPlayerOwner(Player player, Block chestBlock) {
+    private boolean isPlayerOwnerOrInGroup(Player player, Block chestBlock) {
         String key = generateBlockKey(chestBlock);
         String ownerUUID = TavernLock.getDataConfig().getString(key + ".owner");
-        return ownerUUID != null && ownerUUID.equals(player.getUniqueId().toString());
+
+        if (ownerUUID != null && ownerUUID.equals(player.getUniqueId().toString())) {
+            return true;
+        }
+
+        return isPlayerInGroup(UUID.fromString(ownerUUID), player.getUniqueId());
     }
 
     /*
-    Sauvegarder les données du coffre dans data.yml
+    Vérifier si joueur est dans groupe du propriétaire
+     */
+    private boolean isPlayerInGroup(UUID ownerUUID, UUID playerUUID) {
+        List<String> members = TavernLock.getGroupsConfig().getStringList("players." + ownerUUID + ".group_members");
+        return members.contains(playerUUID.toString());
+    }
+
+    /*
+    Sauvegarder données du coffre dans data.yml
      */
     private void saveChestData(Block chestBlock, UUID playerUUID) {
         String key = generateBlockKey(chestBlock);
@@ -314,7 +361,7 @@ public class ChestEvent implements Listener {
     }
 
     /*
-    Supprimer les données du coffre dans data.yml
+    Supprimer données du coffre dans data.yml
      */
     private void removeChestData(Block chestBlock) {
         String key = generateBlockKey(chestBlock);
@@ -332,7 +379,7 @@ public class ChestEvent implements Listener {
     }
 
     /*
-    Vérifier si le bloc est valide pour supporter le panneau
+    Vérifier si bloc est valide pour supporter panneau
      */
     private boolean isStorageBlock(Block block) {
         return block.getType() == Material.CHEST ||
@@ -341,7 +388,7 @@ public class ChestEvent implements Listener {
     }
 
     /*
-     Vérifier si le panneau est attaché à un coffre ou une Shulker Box verrouillé
+     Vérifier si panneau est attaché à coffre ou Shulker Box verrouillé
      */
     private boolean isProtectedSign(Block block) {
         if (isValidSign(block)) {
@@ -353,7 +400,7 @@ public class ChestEvent implements Listener {
     }
 
     /*
-    Vérifier si le panneau est valide (pas un panneau tout seul mais sur un coffre)
+    Vérifier si panneau est valide (pas un panneau tout seul mais sur un coffre)
      */
     private boolean isValidSign(Block block) {
         return block.getType().name().endsWith("WALL_SIGN");
